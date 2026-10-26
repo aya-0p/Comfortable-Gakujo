@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Comfortable Gakujo
 // @namespace    http://tampermonkey.net/
-// @version      1.11.3
+// @version      1.11.4
 // @description  READMEを必ず読んでからご利用ください：https://github.com/woody-1227/Comfortable-Gakujo/blob/main/README.md
 // @author       woody_1227
 // @match        https://gakujo.shizuoka.ac.jp/*
@@ -17,7 +17,7 @@
 (function () {
     'use strict';
 
-    const version = "1.11.3";
+    const version = "1.11.4";
     const updateURL = "https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js";
 
     function waitForDomStability({
@@ -183,32 +183,65 @@
         if (button.dataset.cgBusy) return;
         button.dataset.cgBusy = "1";
         try {
-            const dashboard = await fetchPage(explicitSubmission(document, location.href, "emptyForm", "SC_15005B00_01/init"));
-            if (dashboard.doc.title !== "成績ダッシュボード") throw new Error("成績ダッシュボードを取得できませんでした。");
-            const info = await fetchPage(pageSubmission(dashboard.doc, dashboard.url, Array.from(dashboard.doc.querySelectorAll(".c-btn-submit01")).find(control => control.textContent.trim() === "成績情報詳細")));
-            if (info.doc.title !== "成績情報") throw new Error("成績情報を取得できませんでした。");
+            const info = await fetchGradeInfo();
             const request = pageSubmission(info.doc, info.url, Array.from(info.doc.querySelectorAll(".c-btn-submit01")).find(control => control.textContent.trim() === "単位修得情報照会"));
-            // Only the destination is displayed, using fresh fields from the fetched page.
-            const form = document.createElement("form");
-            form.method = request.method;
-            form.action = request.url.href;
-            form.hidden = true;
-            for (const [name, value] of request.data) {
-                if (typeof value !== "string") continue;
-                const input = document.createElement("input");
-                input.type = "hidden";
-                input.name = name;
-                input.value = value;
-                form.appendChild(input);
-            }
-            document.body.appendChild(form);
-            HTMLFormElement.prototype.submit.call(form);
-            form.remove();
+            submitPage(request);
         } catch (error) {
             console.warn("[CG] 単位情報取得失敗", error);
             alert("単位情報を取得できませんでした。成績メニューから開くか、再ログイン後にお試しください。");
         } finally {
             delete button.dataset.cgBusy;
+        }
+    }
+
+    async function fetchGradeInfo() {
+        const dashboard = await fetchPage(explicitSubmission(document, location.href, "emptyForm", "SC_15005B00_01/init"));
+        if (dashboard.doc.title !== "成績ダッシュボード") throw new Error("成績ダッシュボードを取得できませんでした。");
+        const detail = Array.from(dashboard.doc.querySelectorAll(".c-btn-submit01")).find(control =>
+            control.textContent.trim() === "成績情報詳細");
+        const request = pageSubmission(dashboard.doc, dashboard.url, detail);
+        const info = await fetchPage(request);
+        if (!["成績情報", "成績情報詳細"].includes(info.doc.title)) throw new Error("成績情報を取得できませんでした。");
+        return info;
+    }
+
+    function submitPage(request) {
+        // Only the destination is displayed, using fresh fields from the fetched page.
+        const form = document.createElement("form");
+        form.method = request.method;
+        form.action = request.url.href;
+        form.hidden = true;
+        for (const [name, value] of request.data) {
+            if (typeof value !== "string") continue;
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+        }
+        document.body.appendChild(form);
+        HTMLFormElement.prototype.submit.call(form);
+        form.remove();
+    }
+
+    async function openGradeInfo(button) {
+        if (button.dataset.cgBusy) return;
+        button.dataset.cgBusy = "1";
+        button.disabled = true;
+        try {
+            // A pending background check must finish before starting navigation.
+            while (gradeCheckRunning) await new Promise(resolve => setTimeout(resolve, 100));
+            const dashboard = await fetchPage(explicitSubmission(document, location.href, "emptyForm", "SC_15005B00_01/init"));
+            if (dashboard.doc.title !== "成績ダッシュボード") throw new Error("成績ダッシュボードを取得できませんでした。");
+            const detail = Array.from(dashboard.doc.querySelectorAll(".c-btn-submit01")).find(control =>
+                control.textContent.trim() === "成績情報詳細");
+            submitPage(pageSubmission(dashboard.doc, dashboard.url, detail));
+        } catch (error) {
+            console.warn("[CG] 成績画面表示失敗", error);
+            alert("成績情報を開けませんでした。再ログイン後にお試しください。");
+        } finally {
+            delete button.dataset.cgBusy;
+            button.disabled = false;
         }
     }
 
@@ -221,7 +254,8 @@
         return Array.from(table.querySelectorAll("tbody tr"), row =>
             Array.from(row.querySelectorAll("td[data-label]"), cell =>
                 [cell.getAttribute("data-label"), cell.textContent.replace(/\s+/g, " ").trim()]
-            )
+            ).filter(([label]) => label.trim())
+                .sort(([a], [b]) => a.localeCompare(b))
         ).filter(row => row.length).map(row => JSON.stringify(row)).sort();
     }
 
@@ -230,22 +264,19 @@
         if (gradeCheckRunning || getCookie("cg_grade_save_enabled") !== "1") return;
         gradeCheckRunning = true;
         try {
-            let gradeDoc = document;
-            if (document.title === "ホーム画面（学生・保護者）") {
-                const dashboard = await fetchPage(explicitSubmission(document, location.href, "emptyForm", "SC_15005B00_01/init"));
-                if (dashboard.doc.title !== "成績ダッシュボード") throw new Error("成績ダッシュボードを取得できませんでした。");
-                const detail = Array.from(dashboard.doc.querySelectorAll(".c-btn-submit01")).find(control =>
-                    control.textContent.trim() === "成績情報詳細");
-                const info = await fetchPage(pageSubmission(dashboard.doc, dashboard.url, detail));
-                if (!["成績情報", "成績情報詳細"].includes(info.doc.title)) throw new Error("成績情報を取得できませんでした。");
-                gradeDoc = info.doc;
-            } else if (!["成績情報", "成績情報詳細"].includes(document.title)) {
-                return;
-            }
-            const hash = "detail-v1:" + await sha256(JSON.stringify(gradeSnapshot(gradeDoc)));
+            // Compare only the same server-rendered source. The displayed table
+            // may have been paginated or altered by the site's scripts.
+            if (document.title !== "ホーム画面（学生・保護者）") return;
+            const { doc: gradeDoc } = await fetchGradeInfo();
+            const hash = "detail-v2:" + await sha256(JSON.stringify(gradeSnapshot(gradeDoc)));
             if (getCookie("cg_grade_save_enabled") !== "1") return;
             const previous = decodeURIComponent(getCookie("cg_grade") || "");
-            if (previous.startsWith("detail-v1:") && previous !== hash) setCookie("cg_grade_updated", "1");
+            if (!previous.startsWith("detail-v2:")) {
+                deleteCookie("cg_grade_updated");
+                document.querySelector(".cg-grade-notice-container")?.remove();
+            } else if (previous !== hash) {
+                setCookie("cg_grade_updated", "1");
+            }
             setCookie("cg_grade", hash);
             showUpdateNotice();
         } catch (error) {
@@ -265,7 +296,12 @@
 
         const notice = document.createElement("div");
         notice.className = "cg-grade-notice-container";
-        notice.innerHTML = `<button class="cg-grade-notice-button c-main-menu-btn" onclick="showLoading();postSubmit('emptyForm', 'SC_15005B00_01/init')"><i class="c-icon-notice" aria-hidden="true" style="margin-right: 0.5em"></i>成績が更新されました</button>`;
+        notice.innerHTML = `<button type="button" class="cg-grade-notice-button c-main-menu-btn"><i class="c-icon-notice" aria-hidden="true" style="margin-right: 0.5em"></i>成績が更新されました</button>`;
+
+        notice.querySelector("button").addEventListener("click", event => {
+            event.preventDefault();
+            void openGradeInfo(event.currentTarget);
+        });
 
         const style = document.createElement('style');
         style.textContent = `
@@ -496,12 +532,12 @@
             }
             #cg-home-task-countdown[hidden] { display: none; }
             .index-main-visual[data-cg-deadline-urgency="warning"] .index-main-visual-bg {
-                background-image: repeating-linear-gradient(135deg, transparent 0 32px, rgba(255, 165, 0, .14) 32px 64px),
-                    linear-gradient(110deg, #49251b, #a74819 55%, #351b1b) !important;
+                background-image: linear-gradient(90deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .15)),
+                    repeating-linear-gradient(135deg, #e6b800 0 32px, #181818 32px 64px) !important;
             }
             .index-main-visual[data-cg-deadline-urgency="critical"] .index-main-visual-bg {
-                background-image: repeating-linear-gradient(135deg, transparent 0 32px, rgba(255, 60, 60, .2) 32px 64px),
-                    radial-gradient(ellipse at 60% 50%, #bb172c, #540b18 65%, #220910) !important;
+                background-image: radial-gradient(ellipse at 60% 50%, rgba(255, 20, 40, .5), transparent 70%),
+                    repeating-linear-gradient(135deg, #d60024 0 24px, #120006 24px 48px) !important;
             }
         `;
         document.head.appendChild(style);
@@ -1622,7 +1658,6 @@
                 if (table && tbody) {
                     if (!document.getElementsByClassName("seiseki-marker-contents-body")[0]) return false;
                     initYearSemesterFilter();
-                    void checkGradeUpdates();
                     const reportDate = document.getElementById("reportDate");
                     if (reportDate) {
                         reportDate.click();
