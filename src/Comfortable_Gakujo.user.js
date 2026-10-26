@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Comfortable Gakujo
 // @namespace    http://tampermonkey.net/
-// @version      1.11.4
+// @version      1.12.0
 // @description  READMEを必ず読んでからご利用ください：https://github.com/woody-1227/Comfortable-Gakujo/blob/main/README.md
 // @author       woody_1227
 // @match        https://gakujo.shizuoka.ac.jp/*
@@ -17,7 +17,7 @@
 (function () {
     'use strict';
 
-    const version = "1.11.4";
+    const version = "1.12.0";
     const updateURL = "https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js";
 
     function waitForDomStability({
@@ -118,11 +118,6 @@
         window.addEventListener("load", initializeComfortableGakujo, { once: true });
     }
 
-    const setCookie = (name, value, days = 365) => {
-        const expires = new Date(Date.now() + days * 864e5).toUTCString();
-        document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
-    };
-
     const getCookie = (name) => {
         return document.cookie
             .split("; ")
@@ -133,6 +128,26 @@
     const deleteCookie = (name) => {
         document.cookie = `${name}=; max-age=0; path=/`;
     };
+
+    function migrateGradeStorage() {
+        const keys = ["cg_grade_save_enabled", "cg_grade", "cg_grade_updated"];
+        const migrated = [];
+        try {
+            for (const key of keys) {
+                const value = getCookie(key);
+                if (value === undefined) continue;
+                // Preserve local settings if this browser already completed a migration.
+                if (localStorage.getItem(key) === null) {
+                    localStorage.setItem(key, decodeURIComponent(value));
+                }
+                migrated.push(key);
+            }
+            // Keep cookies if any write fails, so migration can be retried.
+            migrated.forEach(deleteCookie);
+        } catch (error) {
+            console.warn("[CG] 成績通知データの移行失敗（Cookieを保持）", error);
+        }
+    }
 
     // Resolve only known form submissions; never execute scripts from fetched HTML.
     function pageSubmission(doc, baseURL, control) {
@@ -261,7 +276,7 @@
 
     let gradeCheckRunning = false;
     async function checkGradeUpdates() {
-        if (gradeCheckRunning || getCookie("cg_grade_save_enabled") !== "1") return;
+        if (gradeCheckRunning || localStorage.getItem("cg_grade_save_enabled") !== "1") return;
         gradeCheckRunning = true;
         try {
             // Compare only the same server-rendered source. The displayed table
@@ -269,15 +284,15 @@
             if (document.title !== "ホーム画面（学生・保護者）") return;
             const { doc: gradeDoc } = await fetchGradeInfo();
             const hash = "detail-v2:" + await sha256(JSON.stringify(gradeSnapshot(gradeDoc)));
-            if (getCookie("cg_grade_save_enabled") !== "1") return;
-            const previous = decodeURIComponent(getCookie("cg_grade") || "");
+            if (localStorage.getItem("cg_grade_save_enabled") !== "1") return;
+            const previous = localStorage.getItem("cg_grade") || "";
             if (!previous.startsWith("detail-v2:")) {
-                deleteCookie("cg_grade_updated");
+                localStorage.removeItem("cg_grade_updated");
                 document.querySelector(".cg-grade-notice-container")?.remove();
             } else if (previous !== hash) {
-                setCookie("cg_grade_updated", "1");
+                localStorage.setItem("cg_grade_updated", "1");
             }
-            setCookie("cg_grade", hash);
+            localStorage.setItem("cg_grade", hash);
             showUpdateNotice();
         } catch (error) {
             console.warn("[CG] 成績更新確認失敗（前回のデータを保持）", error);
@@ -287,7 +302,7 @@
     }
 
     function showUpdateNotice() {
-        if (getCookie("cg_grade_updated") !== "1") return (false);
+        if (localStorage.getItem("cg_grade_updated") !== "1") return (false);
         if (document.title !== "ホーム画面（学生・保護者）") return (false);
         if (document.getElementsByClassName("cg-grade-notice-container").length > 0) return (false);
 
@@ -321,7 +336,7 @@
                     padding: 1em 2em;
                     overflow: hidden;
                     border: none;
-                    border-radius: 0.5rem;
+                    border-radius:0;
                     color: #fff;
                     font-weight: 600;
                     font-size: 2.4rem;
@@ -433,6 +448,261 @@
         }
     }
 
+    function installBackgroundSettings() {
+        const visual = document.querySelector(".index-main-visual");
+        const bg = visual?.querySelector(".index-main-visual-bg");
+        if (!bg || document.getElementById("cg-header-uploader")) return;
+        const key = "cg-background-settings";
+        let settings;
+        try { settings = JSON.parse(localStorage.getItem(key) || "null"); } catch (_) { /* Use defaults. */ }
+        settings = { mode: settings?.mode === "full" ? "full" : "header", images: settings?.images || {} };
+        if (!localStorage.getItem(key)) settings.images.normal = localStorage.getItem("cg-header-image") || "";
+        const defaults = {
+            normal: 'url("./img/bg_mv01.jpg")',
+            warning: "linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,.15)), repeating-linear-gradient(135deg, #e6b800 0 32px, #181818 32px 64px)",
+            critical: "radial-gradient(ellipse at 60% 50%, rgba(255,20,40,.5), transparent 70%), repeating-linear-gradient(135deg, #d60024 0 24px, #120006 24px 48px)"
+        };
+        const background = (config, state) => {
+            const image = config.images[state] || (state === "none" ? config.images.normal : "");
+            return image ? `url("${image}")` : defaults[state] || defaults.normal;
+        };
+        const layer = document.createElement("div");
+        layer.id = "cg-page-background";
+        layer.setAttribute("aria-hidden", "true");
+        document.body.prepend(layer);
+        const style = document.createElement("style");
+        style.textContent = `
+            body.cg-full-background { isolation: isolate; }
+            #cg-page-background { display:none; position:fixed; inset:0; z-index:-1; pointer-events:none;
+                background-position:center; background-size:cover; background-repeat:no-repeat; }
+            body.cg-full-background #cg-page-background { display:block; }
+            body.cg-full-background .c-footer-inner,
+            body.cg-full-background .c-wrapper,
+            body.cg-full-background .c-container,
+            body.cg-full-background .index-container,
+            body.cg-full-background .index-main-visual,
+            body.cg-full-background .index-main-visual-bg { background-color:transparent !important; }
+            body.cg-full-background .index-main-visual-notice-box,
+            body.cg-full-background .cg-index-main-visual-notice-box,
+            body.cg-full-background #cg-home-task-countdown,
+            body.cg-full-background .index-container .c-box-shadow {
+                background-color:rgba(255,255,255,.60) !important;
+                backdrop-filter:blur(6px);
+            }
+            body.cg-full-background .index-container .c-box-shadow .index-contents-heading-container,
+            body.cg-full-background .index-container .c-box-shadow .index-contents-body,
+            body.cg-full-background .index-container .submissionList,
+            body.cg-full-background .index-container .submissionList_item,
+            body.cg-full-background .index-container .submissionList_item > a {
+                background-color:transparent !important;
+            }
+            body.cg-full-background .index-container .submissionList_item:nth-child(odd) {
+                background-color:rgba(15,23,42,.04) !important;
+            }
+            body.cg-full-background .index-container .submissionList_item > a:hover {
+                background-color:rgba(255,255,255,.35) !important;
+            }
+            #cg-header-uploader { display:inline-flex; align-items:center; gap:8px; padding:10px 16px;
+                border:1px solid rgba(255,255,255,.65); border-radius:0; background:rgba(255,255,255,.94);
+                color:#244344; box-shadow:0 4px 18px rgba(15,23,42,.14); font:600 14px/1.4 sans-serif;
+                cursor:pointer; transition:background .15s, box-shadow .15s; }
+            #cg-header-uploader:hover { background:#fff; box-shadow:0 6px 24px rgba(15,23,42,.24); }
+            #cg-background-dialog { position:fixed !important; inset:0 !important; margin:auto !important;
+                width:min(640px, calc(100vw - 40px)); height:fit-content; max-width:calc(100vw - 40px);
+                max-height:calc(100vh - 48px); max-height:calc(100dvh - 48px);
+                padding:0; box-sizing:border-box; border:1px solid #cfe3e1; border-radius:0;
+                background:#f5fafa; color:#244344; text-align:left;
+                box-shadow:0 20px 64px rgba(0,65,68,.24); font:14px/1.6 sans-serif; overflow:hidden; }
+            #cg-background-dialog[open] { display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
+            #cg-background-dialog:not([open]) { display:none; }
+            #cg-background-dialog::backdrop { background:rgba(14,45,47,.42); backdrop-filter:blur(3px); }
+            #cg-background-dialog .cg-bg-header { position:relative; padding:22px 26px 18px; background:linear-gradient(120deg,#e7f5f3,#fff); border-top:4px solid #00858a; border-bottom:1px solid #dbe9e8; }
+            #cg-background-dialog #cg-background-close { position:absolute; top:12px; right:12px;
+                display:flex; align-items:center; justify-content:center; width:36px; height:36px;
+                padding:0; border:0; border-radius:0; background:transparent; color:#365253;
+                font:28px/1 sans-serif; cursor:pointer; }
+            #cg-background-dialog #cg-background-close:hover { background:#e7f4f3; }
+            #cg-background-dialog .cg-bg-header { padding-right:60px; }
+            #cg-background-dialog h2 { margin:0; font-size:22px; font-weight:700; color:#006e73; }
+            #cg-background-dialog p { margin:8px 0 0; }
+            #cg-background-dialog .cg-bg-body { padding:20px 26px; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+            #cg-background-dialog .cg-bg-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+            #cg-background-dialog label { display:block; margin:0 0 18px; font-weight:600; }
+            #cg-background-dialog select, #cg-background-file { display:block; width:100%; box-sizing:border-box;
+                margin-top:8px; padding:11px 12px; border:1px solid #bcd2d1; border-radius:0; background:#fff;
+                color:#244344; font:inherit; }
+            #cg-background-file { font-weight:400; }
+            #cg-background-file::file-selector-button { border:0; border-radius:0; padding:7px 10px;
+                margin-right:10px; background:#e7f4f3; color:#007b80; font:600 13px sans-serif; cursor:pointer; }
+            #cg-background-dialog .cg-bg-caption { color:#5e7778; font-size:12px; }
+            #cg-background-preview { width:100%; background-position:center; background-size:cover;
+                border:1px solid #d3e4e3; box-sizing:border-box; border-radius:0; margin:10px 0 16px;
+                box-shadow:0 3px 12px rgba(15,23,42,.08); }
+            #cg-background-dialog .cg-bg-footer { display:flex; align-items:center; flex-wrap:wrap; gap:10px;
+                padding:16px 26px; border-top:1px solid #dbe9e8; background:#fff; }
+            #cg-background-dialog button { padding:10px 16px; border:1px solid #bcd2d1; border-radius:0;
+                background:#fff; color:#365253; font:600 14px/1.4 sans-serif; cursor:pointer; }
+            #cg-background-dialog button:hover { background:#edf6f5; }
+            #cg-background-dialog #cg-background-save { background:#00858a; color:#fff; border-color:#00858a; }
+            #cg-background-dialog #cg-background-save:hover { background:#006e73; }
+            #cg-background-dialog #cg-background-reset { margin-right:auto; color:#b33b41; border-color:transparent; }
+            #cg-background-dialog button:disabled { opacity:.5; cursor:wait; }
+            #cg-background-dialog :focus-visible, #cg-header-uploader:focus-visible { outline:3px solid #69bfc2; outline-offset:3px; }
+            #cg-background-preview-bar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+                z-index:10000; display:flex; align-items:center; gap:16px; width:max-content; max-width:calc(100vw - 32px);
+                box-sizing:border-box; padding:12px 18px; border:1px solid #d3e4e3; border-radius:0;
+                background:rgba(255,255,255,.97); color:#244344; box-shadow:0 8px 30px rgba(15,23,42,.25);
+                font:600 14px/1.5 sans-serif; flex-wrap:wrap; }
+            #cg-background-preview-bar[hidden] { display:none; }
+            #cg-background-preview-bar button { border:0; border-radius:0; padding:10px 14px;
+                background:#00858a; color:white; font:inherit; cursor:pointer; }
+            #cg-background-error { color:#b33b41; min-height:1.6em; }
+            @media screen and (max-width:560px) {
+                #cg-background-dialog { width:calc(100vw - 24px); max-width:calc(100vw - 24px);
+                    max-height:calc(100dvh - 24px); border-radius:0; }
+                #cg-background-dialog .cg-bg-footer button { flex:1 1 auto; }
+
+                #cg-background-dialog .cg-bg-header, #cg-background-dialog .cg-bg-body { padding:18px; }
+                #cg-background-dialog .cg-bg-header { padding-right:60px; }
+                #cg-background-dialog .cg-bg-fields { grid-template-columns:1fr; gap:0; }
+                #cg-background-dialog .cg-bg-footer { padding:14px 18px; }
+                #cg-background-dialog #cg-background-reset { width:100%; text-align:left; }
+            }
+        `;
+        document.head.appendChild(style);
+        let pagePreview = null;
+        const apply = () => {
+            const state = pagePreview?.state || visual.dataset.cgDeadlineUrgency || (visual.dataset.cgNoTasks === "true" ? "none" : "normal");
+            const config = pagePreview?.config || settings;
+            const image = background(config, state);
+            document.body.classList.toggle("cg-full-background", config.mode === "full");
+            layer.style.backgroundImage = image;
+            bg.style.setProperty("background-image", config.mode === "full" ? "none" : image, "important");
+            // Match the preview instead of inheriting the site's top-aligned background.
+            bg.style.setProperty("background-position", "center center", "important");
+            bg.style.setProperty("background-size", "cover", "important");
+            bg.style.setProperty("background-repeat", "no-repeat", "important");
+        };
+        new MutationObserver(apply).observe(visual, { attributes:true, attributeFilter:["data-cg-deadline-urgency", "data-cg-no-tasks"] });
+        apply();
+        const opener = document.createElement("button");
+        opener.id = "cg-header-uploader";
+        opener.type = "button";
+        opener.className = "cg-background-opener";
+        opener.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="0"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></svg><span>背景設定</span>`;
+        Object.assign(opener.style, { position:"absolute", top:"1rem", right:"1rem", zIndex:"9", minWidth:"auto" });
+        visual.appendChild(opener);
+        const dialog = document.createElement("dialog");
+        dialog.id = "cg-background-dialog";
+        dialog.setAttribute("aria-labelledby", "cg-background-title");
+        dialog.innerHTML = `<header class="cg-bg-header"><button type="button" id="cg-background-close" aria-label="設定を閉じる" title="閉じる">×</button><h2 id="cg-background-title">背景をカスタマイズ</h2><p class="cg-bg-caption">締め切りの状況に合わせて、トップページの雰囲気を変えられます。</p></header>
+            <div class="cg-bg-body"><div class="cg-bg-fields">
+            <label>表示範囲 <select id="cg-background-mode"><option value="header">横長（ヘッダー）</option><option value="full">画面全体</option></select></label>
+            <label>設定する状態 <select id="cg-background-state"><option value="normal">通常（3日以上）</option><option value="warning">締切まで1日以上・3日未満</option><option value="critical">締切まで1日未満</option><option value="none">課題なし（締切前の課題なし）</option></select></label>
+            </div><label>背景画像 <input id="cg-background-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif"></label>
+            <p class="cg-bg-caption">プレビュー · 中央を基準に表示範囲に合わせます</p><div id="cg-background-preview" role="img" aria-label="背景画像のプレビュー"></div>
+            <p class="cg-bg-caption">画像未設定の場合、通常は標準画像、締切まで3日未満の場合は警告柄、課題なしは通常の画像を使用します。</p>
+            <p id="cg-background-error" role="status"></p>
+            </div><footer class="cg-bg-footer"><button type="button" id="cg-background-reset">この状態の画像を解除</button>
+            <button type="button" id="cg-background-page-preview">ページでプレビュー</button><button type="button" id="cg-background-cancel">キャンセル</button><button type="button" id="cg-background-save">変更を保存</button></footer>`;
+        document.body.appendChild(dialog);
+        const mode = dialog.querySelector("#cg-background-mode");
+        const state = dialog.querySelector("#cg-background-state");
+        const file = dialog.querySelector("#cg-background-file");
+        const error = dialog.querySelector("#cg-background-error");
+        const preview = dialog.querySelector("#cg-background-preview");
+        const save = dialog.querySelector("#cg-background-save");
+        const previewBar = document.createElement("div");
+        previewBar.id = "cg-background-preview-bar";
+        previewBar.hidden = true;
+        previewBar.innerHTML = `<span role="status">背景をプレビュー中（未保存）</span><button type="button">設定に戻る</button>`;
+        document.body.appendChild(previewBar);
+        const returnToSettings = () => {
+            pagePreview = null;
+            previewBar.hidden = true;
+            apply();
+            dialog.showModal();
+            dialog.querySelector("#cg-background-page-preview").focus();
+        };
+        previewBar.querySelector("button").addEventListener("click", returnToSettings);
+        dialog.querySelector("#cg-background-page-preview").addEventListener("click", () => {
+            if (save.disabled) return;
+            refresh();
+            pagePreview = { config:draft, state:state.value };
+            dialog.close();
+            previewBar.hidden = false;
+            apply();
+            previewBar.querySelector("button").focus();
+        });
+        let draft, generation = 0;
+        const refresh = () => {
+            draft.mode = mode.value;
+            const width = draft.mode === "full" ? window.innerWidth : bg.clientWidth || 1500;
+            const height = draft.mode === "full" ? window.innerHeight : bg.clientHeight || 230;
+            preview.style.aspectRatio = `${width} / ${height}`;
+            preview.style.backgroundImage = background(draft, state.value);
+        };
+        opener.addEventListener("click", () => {
+            if (pagePreview) { returnToSettings(); return; }
+            draft = { mode:settings.mode, images:{ ...settings.images } };
+            mode.value = draft.mode;
+            file.value = "";
+            error.textContent = "";
+            refresh();
+            dialog.showModal();
+        });
+        window.addEventListener("resize", () => { if (dialog.open) refresh(); });
+        mode.addEventListener("change", refresh);
+        state.addEventListener("change", () => { generation++; file.value = ""; save.disabled = false; refresh(); });
+        dialog.addEventListener("close", () => { generation++; save.disabled = false; if (!pagePreview) apply(); });
+        file.addEventListener("change", () => {
+            const selected = file.files[0];
+            if (!selected) return;
+            const current = ++generation, target = state.value;
+            save.disabled = true;
+            error.textContent = "読み込み中…";
+            const fail = () => {
+                if (generation !== current) return;
+                error.textContent = "画像を読み込めませんでした。別の画像を選択してください。";
+                save.disabled = false;
+            };
+            const reader = new FileReader();
+            reader.onerror = fail;
+            reader.onload = () => {
+                const img = new Image();
+                img.onerror = fail;
+                img.onload = () => {
+                    if (generation !== current) return;
+                    const scale = Math.min(1, 1920 / img.naturalWidth, 1920 / img.naturalHeight);
+                    const canvas = document.createElement("canvas");
+                    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+                    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+                    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+                    draft.images[target] = canvas.toDataURL("image/webp", .85);
+                    save.disabled = false;
+                    error.textContent = "";
+                    refresh();
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(selected);
+        });
+        dialog.querySelector("#cg-background-reset").addEventListener("click", () => {
+            generation++; save.disabled = false; file.value = ""; error.textContent = "";
+            delete draft.images[state.value]; refresh();
+        });
+        save.addEventListener("click", () => {
+            try { localStorage.setItem(key, JSON.stringify(draft)); }
+            catch (_) { error.textContent = "保存容量が不足しています。画像を小さくするか、ほかの状態の画像を解除してください。"; return; }
+            localStorage.removeItem("cg-header-image");
+            settings = draft;
+            apply();
+            dialog.close();
+        });
+        dialog.querySelector("#cg-background-cancel").addEventListener("click", () => dialog.close());
+        dialog.querySelector("#cg-background-close").addEventListener("click", () => dialog.close());
+    }
+
     function installHomeTaskCountdown() {
         if (document.getElementById("cg-home-task-countdown")) return;
         const notice = document.createElement("li");
@@ -498,7 +768,7 @@
                 gap: 6px;
                 padding: 12px;
                 border: 2px solid #a1a1a1;
-                border-radius: 4px;
+                border-radius:0;
                 box-shadow: 0 0 3px 0 rgba(57, 57, 57, .15);
                 background: #fff;
                 box-sizing: border-box;
@@ -594,6 +864,7 @@
                 .map(item => item.querySelector(".deadline")?.textContent || "");
             const now = Date.now();
             const deadline = nearestHomeDeadline(texts, now);
+            panel.closest(".index-main-visual")?.setAttribute("data-cg-no-tasks", String(!Number.isFinite(deadline)));
             notice.hidden = false;
             if (Number.isFinite(deadline)) {
                 renderClock(deadline - now);
@@ -729,131 +1000,60 @@
         })();
     }
 
+    const hiddenTasksStorageKey = "cg-hidden-tasks";
+    const sameHiddenTask = (a, b) => a.submissionType === b.submissionType &&
+        a.subject === b.subject && a.title === b.title;
+
+    function getHiddenTasks() {
+        const tasks = JSON.parse(localStorage.getItem(hiddenTasksStorageKey) || "[]");
+        if (!Array.isArray(tasks)) throw new Error("非表示課題の保存データを読み込めませんでした。");
+        const migrated = [];
+        for (const cookie of document.cookie.split(";")) {
+            const entry = cookie.trim();
+            const separator = entry.indexOf("=");
+            const name = entry.slice(0, separator);
+            if (separator < 0 || !name.startsWith("cg_hidden_")) continue;
+            let task;
+            try { task = JSON.parse(decodeURIComponent(entry.slice(separator + 1))); }
+            catch (_) { continue; }
+            if (!task || !["submissionType", "subject", "title", "submittalTerm", "submittalStatus"]
+                .every(field => typeof task[field] === "string")) continue;
+            // Existing local data takes precedence when both sources contain a task.
+            if (!tasks.some(saved => sameHiddenTask(saved, task))) tasks.push(task);
+            migrated.push(name);
+        }
+        if (migrated.length) {
+            // Delete old cookies only after all migrated data has been saved successfully.
+            try {
+                localStorage.setItem(hiddenTasksStorageKey, JSON.stringify(tasks));
+                migrated.forEach(deleteCookie);
+            } catch (error) {
+                console.warn("[CG] 非表示課題の移行失敗（Cookieを保持）", error);
+            }
+        }
+        return tasks;
+    }
+
+    function addHiddenTask(submissionType, subject, title, submittalTerm, submittalStatus) {
+        const tasks = getHiddenTasks();
+        const task = { submissionType, subject, title, submittalTerm, submittalStatus };
+        if (tasks.some(saved => sameHiddenTask(saved, task))) return;
+        tasks.push(task);
+        localStorage.setItem(hiddenTasksStorageKey, JSON.stringify(tasks));
+    }
+
+    function removeHiddenTask(submissionType, subject, title) {
+        const task = { submissionType, subject, title };
+        const tasks = getHiddenTasks().filter(saved => !sameHiddenTask(saved, task));
+        localStorage.setItem(hiddenTasksStorageKey, JSON.stringify(tasks));
+    }
+
     function startComfortableGakujo() {
         console.log("[CG] startComfortableGakujo (page fully loaded)");
-        installReferenceTimetableOrder();
-
-        const getHiddenTasks = () => {
-            let hiddenTasks = [];
-            const cookies = document.cookie.split(';');
-
-            cookies.forEach(cookie => {
-                const trimmed = cookie.trim();
-                if (trimmed.startsWith('cg_hidden_')) {
-                    const equalIndex = trimmed.indexOf('=');
-                    if (equalIndex > -1) {
-                        const value = trimmed.substring(equalIndex + 1);
-                        try {
-                            const task = JSON.parse(decodeURIComponent(value));
-                            hiddenTasks.push(task);
-                        } catch (e) {
-
-                        }
-                    }
-                }
-            });
-
-            return hiddenTasks;
-        };
-
-        const addHiddenTask = (submissionType, subject, title, submittalTerm, submittalStatus) => {
-            const hiddenTasks = getHiddenTasks();
-            const exists = hiddenTasks.some(task =>
-                task.submissionType === submissionType &&
-                task.subject === subject &&
-                task.title === title);
-            if (!exists) {
-                const uuid = self.crypto.randomUUID();
-                const cookieName = `cg_hidden_${uuid}`;
-                const task = { submissionType, subject, title, submittalTerm, submittalStatus };
-                setCookie(cookieName, JSON.stringify(task), 365);
-            }
-        };
-
-        const removeHiddenTask = (submissionType, subject, title) => {
-            const cookies = document.cookie.split(';');
-            cookies.forEach(cookie => {
-                const trimmed = cookie.trim();
-                if (trimmed.startsWith('cg_hidden_')) {
-                    const equalIndex = trimmed.indexOf('=');
-                    if (equalIndex > -1) {
-                        const cookieName = trimmed.substring(0, equalIndex);
-                        const value = trimmed.substring(equalIndex + 1);
-                        try {
-                            const task = JSON.parse(decodeURIComponent(value));
-                            if (task.submissionType === submissionType &&
-                                task.subject === subject &&
-                                task.title === title) {
-                                deleteCookie(cookieName);
-                            }
-                        } catch (e) {
-
-                        }
-                    }
-                }
-            });
-        };
-
-        function cropHeaderImage(img) {
-            const TARGET_W = 1500;
-            const TARGET_H = 230;
-            const TARGET_RATIO = TARGET_W / TARGET_H;
-
-            let srcW = img.width;
-            let srcH = img.height;
-
-            let cropW, cropH;
-
-            if (srcW >= TARGET_W && srcH >= TARGET_H) {
-
-                const srcRatio = srcW / srcH;
-
-                if (srcRatio > TARGET_RATIO) {
-                    cropH = srcH;
-                    cropW = Math.round(cropH * TARGET_RATIO);
-                } else {
-                    cropW = srcW;
-                    cropH = Math.round(cropW / TARGET_RATIO);
-                }
-
-            }
-            else {
-                const srcRatio = srcW / srcH;
-
-                if (srcRatio > TARGET_RATIO) {
-                    cropH = srcH;
-                    cropW = Math.round(cropH * TARGET_RATIO);
-                } else {
-                    cropW = srcW;
-                    cropH = Math.round(cropW / TARGET_RATIO);
-                }
-            }
-
-            const cropX = Math.floor((srcW - cropW) / 2);
-            const cropY = Math.floor((srcH - cropH) / 2);
-
-            let outW = cropW;
-            let outH = cropH;
-
-            if (cropW >= TARGET_W && cropH >= TARGET_H) {
-                outW = TARGET_W;
-                outH = TARGET_H;
-            }
-
-            const canvas = document.createElement("canvas");
-            canvas.width = outW;
-            canvas.height = outH;
-
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(
-                img,
-                cropX, cropY, cropW, cropH,
-                0, 0, outW, outH
-            );
-
-            return canvas;
+        if (["ホーム画面（学生・保護者）", "成績情報", "成績情報詳細"].includes(document.title)) {
+            migrateGradeStorage();
         }
-
+        installReferenceTimetableOrder();
 
         if (document.title === "ホーム画面（学生・保護者）") {
             const indexMainVisualUserLastLogin = document.getElementsByClassName("index-main-visual-user-last-login")[0];
@@ -900,7 +1100,7 @@
             const indexNoticeOtherItems = document.getElementsByClassName("index-notice-other-items")[0];
             const li = document.createElement('li');
             li.className = 'index-notice-other-item';
-            if (getCookie("cg_grade_save_enabled") === "1") {
+            if (localStorage.getItem("cg_grade_save_enabled") === "1") {
                 li.innerHTML = `
                     <div class="cg-index-main-visual-notice-box cg-index-notice-other-link">
                         <p class="title" style="text-align: center;">成績更新通知</p>
@@ -934,7 +1134,7 @@
                     justify-content: space-between;
                     position: relative;
                     padding: 0 12px;
-                    border-radius: 4px;
+                    border-radius:0;
                     box-shadow: 0 0 3px 0 rgba(57, 57, 57, .15);
                     border: 2px solid #a1a1a1;
                     background-color: #fff;
@@ -1098,116 +1298,18 @@
             window.addEventListener('change', (e) => {
                 if (e.target.id === 'cg-grade-save-toggle') {
                     if (e.target.checked) {
-                        setCookie("cg_grade_save_enabled", "1");
+                        localStorage.setItem("cg_grade_save_enabled", "1");
                         void checkGradeUpdates();
                     } else {
-                        deleteCookie("cg_grade_save_enabled");
-                        deleteCookie("cg_grade");
-                        deleteCookie("cg_grade_updated");
+                        localStorage.removeItem("cg_grade_save_enabled");
+                        localStorage.removeItem("cg_grade");
+                        localStorage.removeItem("cg_grade_updated");
                         document.getElementsByClassName("cg-grade-notice-container")[0]?.remove();
                     }
                 }
             });
 
-            const indexMainVisualBg = document.getElementsByClassName("index-main-visual-bg")[0];
-            const savedImage = localStorage.getItem("cg-header-image");
-
-            if (savedImage) {
-                indexMainVisualBg.style.backgroundImage = `url(${savedImage})`;
-            }
-
-            const contents = document.getElementsByClassName("index-main-visual")[0];
-            if (!contents || document.getElementById("cg-header-uploader")) return;
-
-            const uploaderWrapper = document.createElement("div");
-            uploaderWrapper.id = "cg-header-uploader";
-            uploaderWrapper.style.position = "absolute";
-            uploaderWrapper.style.top = "1rem";
-            uploaderWrapper.style.right = "1rem";
-            uploaderWrapper.style.zIndex = "20";
-
-            uploaderWrapper.style.width = "fit-content";
-
-            const uploadBtn = document.createElement("button");
-            uploadBtn.type = "button";
-            uploadBtn.id = "cg-header-uploader-btn";
-            uploadBtn.className = "c-btn c-btn-line";
-            uploadBtn.style.minWidth = "auto";
-            uploadBtn.style.display = "inline-block";
-            uploadBtn.innerHTML = `
-                <span class="c-btn-link">
-                    <i class="c-icon-edit" style="margin: 0;" aria-hidden="true"></i>
-                </span>
-            `;
-
-            const removeBtn = document.createElement("button");
-            removeBtn.type = "button";
-            removeBtn.id = "cg-header-remove-btn";
-            removeBtn.className = "c-btn c-btn-line";
-            removeBtn.style.marginLeft = "0.5rem";
-            removeBtn.style.minWidth = "auto";
-            removeBtn.style.display = "inline-block";
-            removeBtn.innerHTML = `
-                <span class="c-btn-link">
-                    <i class="c-icon-close" style="margin: 0;" aria-hidden="true"></i>
-                </span>
-            `;
-
-            const fileInput = document.createElement("input");
-            fileInput.type = "file";
-            fileInput.id = "cg-header-file";
-            fileInput.accept = ".png,.jpg,.jpeg,.gif";
-            fileInput.hidden = true;
-
-            uploadBtn.addEventListener("click", (e) => {
-                fileInput.click();
-            }, true);
-
-            uploaderWrapper.appendChild(uploadBtn);
-            uploaderWrapper.appendChild(removeBtn);
-            uploaderWrapper.appendChild(fileInput);
-            contents.appendChild(uploaderWrapper);
-
-            fileInput.addEventListener("change", (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = cropHeaderImage(img);
-                        const base64 = canvas.toDataURL("image/png");
-                        const sizeMB = base64.length / (1024 * 1024);
-
-                        if (sizeMB > 3) {
-                            alert("画像サイズは3MB以下にしてください");
-                            return;
-                        }
-
-                        localStorage.setItem("cg-header-image", base64);
-
-                        const bg = document.getElementsByClassName("index-main-visual-bg")[0];
-                        if (bg) {
-                            bg.style.backgroundImage = `url(${base64})`;
-                        }
-
-                        console.log("[CG] Header image updated");
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
-
-                fileInput.value = "";
-            });
-
-            removeBtn.addEventListener("click", (e) => {
-                localStorage.removeItem("cg-header-image");
-                const bg = document.getElementsByClassName("index-main-visual-bg")[0];
-                if (bg) {
-                    bg.style.backgroundImage = `url(./img/bg_mv01.jpg)`;
-                }
-            });
+            installBackgroundSettings();
         } else if (document.title === "課題・アンケートリスト") {
             let processedSet = new WeakSet();
             let hiddenCount = 0;
@@ -1521,7 +1623,7 @@
 
 
         } else if (document.title === "成績情報" || document.title === "成績情報詳細") {
-            deleteCookie("cg_grade_updated");
+            localStorage.removeItem("cg_grade_updated");
 
             function collectYearSemesters() {
                 const years = new Set();
