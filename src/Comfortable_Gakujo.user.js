@@ -20,6 +20,10 @@
     const version = "1.12.0";
     const updateURL = "https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js";
 
+    /**
+     * @param {{timeout?: number; stableTime?: number}} param0
+     * @returns {Promise<void>}
+     */
     function waitForDomStability({
         timeout = 10000,
         stableTime = 500
@@ -57,6 +61,11 @@
         });
     }
 
+    /**
+     * @param {string} selector
+     * @param {number} timeout
+     * @returns {Promise<Element>}
+     */
     function waitForSelector(selector, timeout = 10000) {
         return new Promise((resolve, reject) => {
             const start = Date.now();
@@ -74,7 +83,10 @@
         });
     }
 
-    // Check existing content as well as future mutations.
+    /**
+     * Check existing content as well as future mutations.
+     * @param {() => boolean} check
+     */
     function observeUntilReady(check) {
         const observer = new MutationObserver(() => {
             if (check()) observer.disconnect();
@@ -84,6 +96,9 @@
     }
 
     let initializationStarted = false;
+    /**
+     * @returns {Promise<void>}
+     */
     async function initializeComfortableGakujo() {
         if (initializationStarted) return;
         initializationStarted = true;
@@ -118,6 +133,10 @@
         window.addEventListener("load", initializeComfortableGakujo, { once: true });
     }
 
+    /**
+     * @param {string} name
+     * @returns {string|undefined}
+     */
     const getCookie = (name) => {
         return document.cookie
             .split("; ")
@@ -125,6 +144,9 @@
             ?.split("=")[1];
     };
 
+    /**
+     * @param {string} name
+     */
     const deleteCookie = (name) => {
         document.cookie = `${name}=; max-age=0; path=/`;
     };
@@ -149,7 +171,18 @@
         }
     }
 
-    // Resolve only known form submissions; never execute scripts from fetched HTML.
+    /**
+     * Resolve only known form submissions; never execute scripts from fetched HTML.
+     * @param {Document} doc
+     * @param {string} baseURL
+     * @param {HTMLDivElement} control
+     * @returns {{
+     *   url: URL;
+     *   data: FormData;
+     *   method: string;
+     * }}
+     * @throws
+     */
     function pageSubmission(doc, baseURL, control) {
         const source = `${control?.getAttribute("onclick") || ""} ${control?.getAttribute("href") || ""}`;
         const match = source.match(/postSubmit\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]/);
@@ -171,12 +204,37 @@
         return { url, data, method: match || buttonMatch ? "POST" : (form.getAttribute("method") || "GET").toUpperCase() };
     }
 
+    /**
+     * @param {Document} doc
+     * @param {string} baseURL
+     * @param {string} formId
+     * @param {string} action
+     * @returns {{
+     *   url: URL;
+     *   data: FormData;
+     *   method: string;
+     * }}
+     * @throws
+     */
     function explicitSubmission(doc, baseURL, formId, action) {
         const form = doc.getElementById(formId);
         if (!form) throw new Error("学情のフォームが見つかりません。");
         return { url: new URL(action, baseURL), data: new FormData(form), method: "POST" };
     }
 
+    /**
+     * 
+     * @param {{
+     *   url: URL;
+     *   data: FormData;
+     *   method: string;
+     * }} request
+     * @returns {Promise<{
+     *   doc: Document;
+     *   url: string;
+     * }>}
+     * @throws
+     */
     async function fetchPage(request) {
         const url = new URL(request.url);
         const options = { method: request.method, credentials: "same-origin", cache: "no-store" };
@@ -194,6 +252,9 @@
         return { doc, url: new URL(doc.querySelector("base[href]")?.getAttribute("href") || response.url, response.url).href };
     }
 
+    /**
+     * @param {HTMLButtonElement} button
+     */
     async function openCreditInfo(button) {
         if (button.dataset.cgBusy) return;
         button.dataset.cgBusy = "1";
@@ -209,6 +270,12 @@
         }
     }
 
+    /**
+     * @returns {Promise<{
+     *   doc: Document;
+     *   url: string;
+     * }>}
+     */
     async function fetchGradeInfo() {
         const dashboard = await fetchPage(explicitSubmission(document, location.href, "emptyForm", "SC_15005B00_01/init"));
         if (dashboard.doc.title !== "成績ダッシュボード") throw new Error("成績ダッシュボードを取得できませんでした。");
@@ -220,6 +287,13 @@
         return info;
     }
 
+    /**
+     * @param {{
+     *   url: URL;
+     *   data: FormData;
+     *   method: string;
+     * }} request 
+     */
     function submitPage(request) {
         // Only the destination is displayed, using fresh fields from the fetched page.
         const form = document.createElement("form");
@@ -239,6 +313,10 @@
         form.remove();
     }
 
+    /**
+     * @param {HTMLButtonElement} button
+     * @returns {Promise<void>}
+     */
     async function openGradeInfo(button) {
         if (button.dataset.cgBusy) return;
         button.dataset.cgBusy = "1";
@@ -260,6 +338,10 @@
         }
     }
 
+    /**
+     * @param {Document} doc
+     * @returns {string[]}
+     */
     function gradeSnapshot(doc) {
         const table = doc.getElementById("02");
         if (!table || !table.querySelector('td[data-label="成績報告時期"]')) {
@@ -275,6 +357,9 @@
     }
 
     let gradeCheckRunning = false;
+    /**
+     * @returns {Promise<void>}
+     */
     async function checkGradeUpdates() {
         if (gradeCheckRunning || localStorage.getItem("cg_grade_save_enabled") !== "1") return;
         gradeCheckRunning = true;
@@ -301,6 +386,9 @@
         }
     }
 
+    /**
+     * @returns {boolean}
+     */
     function showUpdateNotice() {
         if (localStorage.getItem("cg_grade_updated") !== "1") return (false);
         if (document.title !== "ホーム画面（学生・保護者）") return (false);
@@ -389,12 +477,21 @@
         return (true);
     }
 
+    /**
+     * @param {string} text
+     * @returns {Promise<string>}
+     */
     async function sha256(text) {
         const uint8 = new TextEncoder().encode(text)
         const digest = await crypto.subtle.digest('SHA-256', uint8)
         return Array.from(new Uint8Array(digest)).map(v => v.toString(16).padStart(2, '0')).join('')
     }
 
+    /**
+     * @param {number} ms
+     * @param {number} precision
+     * @returns {string}
+     */
     function formatTimeLeft(ms, precision = 0) {
         const d = Math.floor(ms / (1000 * 60 * 60 * 24));
         const h = Math.floor(ms / (1000 * 60 * 60)) % 24;
@@ -407,6 +504,11 @@
         return `残り ${dayStr}${h.toString().padStart(2, '0')}時間 ${m.toString().padStart(2, '0')}分 ${seconds}秒`;
     }
 
+    /**
+     * @param {HTMLDivElement} timer
+     * @param {number} remaining
+     * @param {number} precision
+     */
     function renderDeadlineCountdown(timer, remaining, precision = 0) {
         const expired = remaining <= 0;
         timer.textContent = expired ? "締切済み" : formatTimeLeft(remaining, precision);
@@ -417,6 +519,10 @@
         });
     }
 
+    /**
+     * @param {string} text
+     * @returns {number}
+     */
     function homeTaskDeadline(text) {
         const normalized = text.normalize("NFKC");
         const dates = Array.from(normalized.matchAll(/(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?(?:\s*[（(][^）)]*[）)])?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/g));
@@ -431,11 +537,20 @@
         return local.getUTCMonth() === +month - 1 && local.getUTCDate() === +day ? value : NaN;
     }
 
+    /**
+     * @param {string[]} texts
+     * @param {number} now
+     * @returns {number}
+     */
     function nearestHomeDeadline(texts, now) {
         return texts.map(homeTaskDeadline).filter(deadline => Number.isFinite(deadline) && deadline > now)
             .reduce((nearest, deadline) => Math.min(nearest, deadline), Infinity);
     }
 
+    /**
+     * @param {HTMLDialogElement} visual
+     * @param {number} remaining
+     */
     function updateDeadlineBackground(visual, remaining) {
         if (!visual) return;
         const urgency = remaining > 0 && remaining < 86400000 ? "critical"
@@ -881,6 +996,10 @@
         setInterval(update, 1000);
     }
 
+    /**
+     * @param {string} period
+     * @returns {string}
+     */
     function formatClassPeriod(period) {
         const normalized = period.normalize("NFKC");
         const numbers = normalized.match(/\d+/g)?.map(Number);
@@ -892,6 +1011,19 @@
         return `${classes.join("・")}コマ`;
     }
 
+    /**
+     * @param {Document} doc
+     * @returns {{
+     *   year: string | undefined;
+     *   semester: string | undefined;
+     *   order: Map<string, number>;
+     *   slots: Map<string, {
+     *     order: number;
+     *     day: number;
+     *     period: string;
+     *   }[]>;
+     * }}
+     */
     function collectTimetableOrder(doc) {
         const order = new Map();
         const slots = new Map();
@@ -921,6 +1053,22 @@
         };
     }
 
+    /**
+     * @param {HTMLDialogElement} select
+     * @param {{
+     *   year: string | undefined;
+     *   semester: string | undefined;
+     *   order: Map<string, number>;
+     *   slots: Map<string, {
+     *     order: number;
+     *     day: number;
+     *     period: string;
+     *   }[]>;
+     * }} timetable
+     * @param {string} year
+     * @param {string} semester
+     * @returns {boolean}
+     */
     function sortReferenceOptions(select, timetable, year, semester) {
         if (!select) return false;
         const valid = year === timetable.year && semester === timetable.semester && timetable.order.size > 0;
@@ -1001,9 +1149,31 @@
     }
 
     const hiddenTasksStorageKey = "cg-hidden-tasks";
+    /**
+     * @param {{
+     *   submissionType: string;
+     *   subject: string;
+     *   title: string;
+     * }} a
+     * @param {{
+     *   submissionType: string;
+     *   subject: string;
+     *   title: string;
+     * }} b
+     * @returns {boolean}
+     */
     const sameHiddenTask = (a, b) => a.submissionType === b.submissionType &&
         a.subject === b.subject && a.title === b.title;
 
+    /**
+     * @returns {{
+     *   submissionType: string;
+     *   subject: string;
+     *   title: string;
+     *   submittalTerm: string;
+     *   submittalStatus: string;
+     * }}
+     */
     function getHiddenTasks() {
         const tasks = JSON.parse(localStorage.getItem(hiddenTasksStorageKey) || "[]");
         if (!Array.isArray(tasks)) throw new Error("非表示課題の保存データを読み込めませんでした。");
@@ -1034,6 +1204,13 @@
         return tasks;
     }
 
+    /**
+     * @param {string} submissionType
+     * @param {string} subject
+     * @param {string} title
+     * @param {string} submittalTerm
+     * @param {string} submittalStatus
+     */
     function addHiddenTask(submissionType, subject, title, submittalTerm, submittalStatus) {
         const tasks = getHiddenTasks();
         const task = { submissionType, subject, title, submittalTerm, submittalStatus };
@@ -1042,12 +1219,20 @@
         localStorage.setItem(hiddenTasksStorageKey, JSON.stringify(tasks));
     }
 
+    /**
+     * @param {string} submissionType
+     * @param {string} subject
+     * @param {string} title
+     */
     function removeHiddenTask(submissionType, subject, title) {
         const task = { submissionType, subject, title };
         const tasks = getHiddenTasks().filter(saved => !sameHiddenTask(saved, task));
         localStorage.setItem(hiddenTasksStorageKey, JSON.stringify(tasks));
     }
 
+    /**
+     * @returns {void}
+     */
     function startComfortableGakujo() {
         console.log("[CG] startComfortableGakujo (page fully loaded)");
         if (["ホーム画面（学生・保護者）", "成績情報", "成績情報詳細"].includes(document.title)) {
