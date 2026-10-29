@@ -95,6 +95,31 @@
         if (check()) observer.disconnect();
     }
 
+    function prepareColorCss() {
+        /**
+         * @type {[string, string][]}
+         */
+        const data = [
+            ["c-gnav", "--cg-color-button"],
+            ["c-gnav-children", "--cg-color-button-selected"],
+            ["c-fixed-heading-container", "--cg-color-header"],
+            ["c-btn-prev", "--cg-color-button-back"],
+            ["c-wrapper", "--cg-color-background"],
+
+        ]
+        for (const [from, to] of data) {
+            const element = document.createElement("div");
+            element.className = from;
+            document.body.appendChild(element);
+            const color = getComputedStyle(element).backgroundColor;
+            element.remove();
+            document.documentElement.style.setProperty(
+                to,
+                color
+            );
+        }
+    }
+
     let initializationStarted = false;
     /**
      * @returns {Promise<void>}
@@ -109,6 +134,10 @@
             await waitForDomStability();
 
             console.log("[CG] DOM stabilized");
+
+            prepareColorCss();
+
+            console.log("[CG] color css prepared");
 
             if (document.title === "ホーム画面（学生・保護者）") {
                 await waitForSelector(".index-container");
@@ -625,53 +654,45 @@
             #cg-background-dialog { position:fixed !important; inset:0 !important; margin:auto !important;
                 width:min(640px, calc(100vw - 40px)); height:fit-content; max-width:calc(100vw - 40px);
                 max-height:calc(100vh - 48px); max-height:calc(100dvh - 48px);
-                padding:0; box-sizing:border-box; border:1px solid #cfe3e1; border-radius:0;
-                background:#f5fafa; color:#244344; text-align:left;
+                padding:0; box-sizing:border-box; border:0px; border-radius:0;
+                background:white; color:#333333; text-align:left;
                 box-shadow:0 20px 64px rgba(0,65,68,.24); font:14px/1.6 sans-serif; overflow:hidden; }
             #cg-background-dialog[open] { display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
             #cg-background-dialog:not([open]) { display:none; }
             #cg-background-dialog::backdrop { background:rgba(14,45,47,.42); backdrop-filter:blur(3px); }
-            #cg-background-dialog .cg-bg-header { position:relative; padding:22px 26px 18px; background:linear-gradient(120deg,#e7f5f3,#fff); border-top:4px solid #00858a; border-bottom:1px solid #dbe9e8; }
+            #cg-background-dialog .cg-bg-header { position:relative; padding:22px 26px 18px; background: var(--cg-color-header); border: 1px solid #ffffff; }
             #cg-background-dialog #cg-background-close { position:absolute; top:12px; right:12px;
                 display:flex; align-items:center; justify-content:center; width:36px; height:36px;
                 padding:0; border:0; border-radius:0; background:transparent; color:#365253;
                 font:28px/1 sans-serif; cursor:pointer; }
-            #cg-background-dialog #cg-background-close:hover { background:#e7f4f3; }
             #cg-background-dialog .cg-bg-header { padding-right:60px; }
-            #cg-background-dialog h2 { margin:0; font-size:22px; font-weight:700; color:#006e73; }
+            #cg-background-dialog h2 { margin:0; font-size:22px; font-weight:700; color: #333333; }
             #cg-background-dialog p { margin:8px 0 0; }
             #cg-background-dialog .cg-bg-body { padding:20px 26px; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
             #cg-background-dialog .cg-bg-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
             #cg-background-dialog label { display:block; margin:0 0 18px; font-weight:600; }
+            #cg-background-dialog select {
+                border-radius:0;
+            }
             #cg-background-dialog select, #cg-background-file { display:block; width:100%; box-sizing:border-box;
-                margin-top:8px; padding:11px 12px; border:1px solid #bcd2d1; border-radius:0; background:#fff;
-                color:#244344; font:inherit; }
-            #cg-background-file { font-weight:400; }
+                background:#fff; color:#244344; font:inherit; }
+            #cg-background-file { padding:11px 12px; border-radius: 2px; font-weight:400; border: 1px solid #ccc; }
             #cg-background-file::file-selector-button { border:0; border-radius:0; padding:7px 10px;
-                margin-right:10px; background:#e7f4f3; color:#007b80; font:600 13px sans-serif; cursor:pointer; }
-            #cg-background-dialog .cg-bg-caption { color:#5e7778; font-size:12px; }
+                margin-right:10px; background:var(--cg-color-button); color:white; font:600 13px sans-serif; cursor:pointer; }
+            #cg-background-dialog .cg-bg-caption { color: #333333; font-size:12px; }
             #cg-background-preview { width:100%; background-position:center; background-size:cover;
                 border:1px solid #d3e4e3; box-sizing:border-box; border-radius:0; margin:10px 0 16px;
                 box-shadow:0 3px 12px rgba(15,23,42,.08); }
             #cg-background-dialog .cg-bg-footer { display:flex; align-items:center; flex-wrap:wrap; gap:10px;
                 padding:16px 26px; border-top:1px solid #dbe9e8; background:#fff; }
-            #cg-background-dialog button { padding:10px 16px; border:1px solid #bcd2d1; border-radius:0;
-                background:#fff; color:#365253; font:600 14px/1.4 sans-serif; cursor:pointer; }
-            #cg-background-dialog button:hover { background:#edf6f5; }
-            #cg-background-dialog #cg-background-save { background:#00858a; color:#fff; border-color:#00858a; }
-            #cg-background-dialog #cg-background-save:hover { background:#006e73; }
-            #cg-background-dialog #cg-background-reset { margin-right:auto; color:#b33b41; border-color:transparent; }
+            #cg-background-dialog #cg-background-reset { margin-right:auto; color:white; border-color:transparent; }
             #cg-background-dialog button:disabled { opacity:.5; cursor:wait; }
-            #cg-background-dialog :focus-visible, #cg-header-uploader:focus-visible { outline:3px solid #69bfc2; outline-offset:3px; }
             #cg-background-preview-bar { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
                 z-index:10000; display:flex; align-items:center; gap:16px; width:max-content; max-width:calc(100vw - 32px);
-                box-sizing:border-box; padding:12px 18px; border:1px solid #d3e4e3; border-radius:0;
+                box-sizing:border-box; padding:12px 18px; border-radius:0;
                 background:rgba(255,255,255,.97); color:#244344; box-shadow:0 8px 30px rgba(15,23,42,.25);
                 font:600 14px/1.5 sans-serif; flex-wrap:wrap; }
             #cg-background-preview-bar[hidden] { display:none; }
-            #cg-background-preview-bar button { border:0; border-radius:0; padding:10px 14px;
-                background:#00858a; color:white; font:inherit; cursor:pointer; }
-            #cg-background-error { color:#b33b41; min-height:1.6em; }
             @media screen and (max-width:560px) {
                 #cg-background-dialog { width:calc(100vw - 24px); max-width:calc(100vw - 24px);
                     max-height:calc(100dvh - 24px); border-radius:0; }
@@ -682,6 +703,12 @@
                 #cg-background-dialog .cg-bg-fields { grid-template-columns:1fr; gap:0; }
                 #cg-background-dialog .cg-bg-footer { padding:14px 18px; }
                 #cg-background-dialog #cg-background-reset { width:100%; text-align:left; }
+            }
+            .width-100 {
+                width: 100% !important;
+            }
+            .cg-bg-fields .c-form-box {
+                margin-top: 8px;
             }
         `;
         document.head.appendChild(style);
@@ -710,16 +737,19 @@
         const dialog = document.createElement("dialog");
         dialog.id = "cg-background-dialog";
         dialog.setAttribute("aria-labelledby", "cg-background-title");
-        dialog.innerHTML = `<header class="cg-bg-header"><button type="button" id="cg-background-close" aria-label="設定を閉じる" title="閉じる">×</button><h2 id="cg-background-title">背景をカスタマイズ</h2><p class="cg-bg-caption">締め切りの状況に合わせて、トップページの雰囲気を変えられます。</p></header>
+        dialog.innerHTML = `<header class="cg-bg-header"><button type="button" id="cg-background-close" aria-label="設定を閉じる" title="閉じる">×</button><h2 id="cg-background-title">背景をカスタマイズ</h2></header>
             <div class="cg-bg-body"><div class="cg-bg-fields">
-            <label>表示範囲 <select id="cg-background-mode"><option value="header">横長（ヘッダー）</option><option value="full">画面全体</option></select></label>
-            <label>設定する状態 <select id="cg-background-state"><option value="normal">通常（3日以上）</option><option value="warning">締切まで1日以上・3日未満</option><option value="critical">締切まで1日未満</option><option value="none">課題なし（締切前の課題なし）</option></select></label>
+            <label>表示範囲 <div class="c-form-box"><div class="select_wrapper u-w100per-sp width-100"><select id="cg-background-mode" class="select u-w260-pc u-w100per-sp js-select"><option value="header">横長（ヘッダー）</option><option value="full">画面全体</option></select></div></div></label>
+            <label>設定する状態 <div class="c-form-box"><div class="select_wrapper u-w100per-sp width-100"><select id="cg-background-state" class="select u-w260-pc u-w100per-sp js-select"><option value="normal">通常（3日以上）</option><option value="warning">締切まで1日以上・3日未満</option><option value="critical">締切まで1日未満</option><option value="none">課題なし（締切前の課題なし）</option></select></div></div></label>
             </div><label>背景画像 <input id="cg-background-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif"></label>
-            <p class="cg-bg-caption">プレビュー · 中央を基準に表示範囲に合わせます</p><div id="cg-background-preview" role="img" aria-label="背景画像のプレビュー"></div>
-            <p class="cg-bg-caption">画像未設定の場合、通常は標準画像、締切まで3日未満の場合は警告柄、課題なしは通常の画像を使用します。</p>
+            <p class="cg-bg-caption">プレビュー · 中央に合わせて表示されます。</p><div id="cg-background-preview" role="img" aria-label="背景画像のプレビュー"></div>
+            <p class="cg-bg-caption">画像未設定の場合、締切が近づくと警告柄となります。</p>
             <p id="cg-background-error" role="status"></p>
-            </div><footer class="cg-bg-footer"><button type="button" id="cg-background-reset">この状態の画像を解除</button>
-            <button type="button" id="cg-background-page-preview">ページでプレビュー</button><button type="button" id="cg-background-cancel">キャンセル</button><button type="button" id="cg-background-save">変更を保存</button></footer>`;
+            </div><footer class="cg-bg-footer">
+            <button type="button" id="cg-background-reset" class="c-btn c-btn-submit02"><span class="c-btn-link"><span class="c-btn-text ">背景をリセット</span></span></button>
+            <button type="button" id="cg-background-page-preview" class="c-btn c-btn-submit01"><span class="c-btn-link"><span class="c-btn-text ">ページでプレビュー</span><i class="c-icon-arrow-right c-color-base" aria-hidden="true"></i></span></button>
+            <button type="button" id="cg-background-save" class="c-btn c-btn-submit01 active"><span class="c-btn-link"><span class="c-btn-text ">変更を保存</span></span></button>
+            </footer>`;
         document.body.appendChild(dialog);
         const mode = dialog.querySelector("#cg-background-mode");
         const state = dialog.querySelector("#cg-background-state");
@@ -730,7 +760,7 @@
         const previewBar = document.createElement("div");
         previewBar.id = "cg-background-preview-bar";
         previewBar.hidden = true;
-        previewBar.innerHTML = `<span role="status">背景をプレビュー中（未保存）</span><button type="button">設定に戻る</button>`;
+        previewBar.innerHTML = `<span role="status">背景をプレビュー中（未保存）</span><button type="button" class="c-btn c-btn-submit01"><span class="c-btn-link"><span class="c-btn-text ">設定に戻る</span><i class="c-icon-arrow-right c-color-base" aria-hidden="true"></i></span></button>`;
         document.body.appendChild(previewBar);
         const returnToSettings = () => {
             pagePreview = null;
@@ -814,7 +844,6 @@
             apply();
             dialog.close();
         });
-        dialog.querySelector("#cg-background-cancel").addEventListener("click", () => dialog.close());
         dialog.querySelector("#cg-background-close").addEventListener("click", () => dialog.close());
     }
 
