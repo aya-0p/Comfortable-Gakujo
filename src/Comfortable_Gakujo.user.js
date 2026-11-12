@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         Comfortable Gakujo
-// @namespace    http://tampermonkey.net/
+// @name         Comfortable Gakujo (aya)
+// @namespace    https://github.com/aya-0p/Comfortable-Gakujo
 // @version      1.12.0
 // @description  READMEを必ず読んでからご利用ください：https://github.com/aya-0p/Comfortable-Gakujo/blob/CG-aya/README.md
 // @author       aya-0p
