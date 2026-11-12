@@ -2,23 +2,23 @@
 // @name         Comfortable Gakujo
 // @namespace    http://tampermonkey.net/
 // @version      1.12.0
-// @description  READMEを必ず読んでからご利用ください：https://github.com/woody-1227/Comfortable-Gakujo/blob/main/README.md
-// @author       woody_1227
+// @description  READMEを必ず読んでからご利用ください：https://github.com/aya-0p/Comfortable-Gakujo/blob/CG-aya/README.md
+// @author       aya-0p
 // @match        https://gakujo.shizuoka.ac.jp/*
 // @match        https://idp.shizuoka.ac.jp/*
 // @run-at       document-start
 // @inject-into  page
 // @grant        none
-// @updateURL    https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js
-// @downloadURL  https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js
-// @icon         https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/icon.png
+// @updateURL    https://github.com/aya-0p/Comfortable-Gakujo/raw/CG-aya/src/Comfortable_Gakujo.user.js
+// @downloadURL  https://github.com/aya-0p/Comfortable-Gakujo/raw/CG-aya/src/Comfortable_Gakujo.user.js
+// @icon         https://github.com/aya-0p/Comfortable-Gakujo/raw/CG-aya/src/icon.png
 // ==/UserScript==
 
 (function () {
     'use strict';
 
     const version = "1.12.0";
-    const updateURL = "https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js";
+    const updateURL = "https://github.com/aya-0p/Comfortable-Gakujo/raw/CG-aya/src/Comfortable_Gakujo.user.js";
 
     /**
      * @param {{timeout?: number; stableTime?: number}} param0

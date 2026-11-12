@@ -1,6 +1,8 @@
 # Comfortable-Gakujo
 ![version](https://img.shields.io/badge/version-1.12.0-green)
 
+これは<https://github.com/woody-1227/Comfortable-Gakujo>へのPR用ですが、採用前でも使用できるように公開しているものです。このブラインチでは各種リンクを修正しています。
+
 ## 注意事項
 - 非公式の拡張機能です。
 - 生成AIによって生成されたソースコードが利用されています。
@@ -22,7 +24,7 @@ https://addons.mozilla.org/ja/firefox/addon/tampermonkey/
 https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd?hl=ja-JP
 
 ### 2. ブラウザで次のリンクにアクセスし、画面の指示に従って操作する
-https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js
+https://github.com/aya-0p/Comfortable-Gakujo/raw/CG-aya/src/Comfortable_Gakujo.user.js
 
 ### 3. アップデートについて
 Tampermonkeyの自動アップデートを利用できます。  
@@ -30,7 +32,7 @@ Tampermonkeyの自動アップデートを利用できます。
 定期的な手動アップデートをおすすめします。  
   
 手動でアップデートを行うには、下記のリンクに再度アクセスしてください。  
-https://github.com/woody-1227/Comfortable-Gakujo/raw/main/src/Comfortable_Gakujo.user.js
+https://github.com/aya-0p/Comfortable-Gakujo/raw/CG-aya/src/Comfortable_Gakujo.user.js
 
 ## 機能
 - 1~4, 10の機能は「課題・アンケートリスト」のページにて自動実行されます。
